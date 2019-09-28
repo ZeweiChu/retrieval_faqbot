@@ -1,6 +1,8 @@
 import argparse
 from collections import Counter
 import code
+import pickle
+import os
 
 import torch
 import torch.nn as nn
@@ -64,7 +66,7 @@ def train(df, model, loss_fn, optimizer, device, tokenizer, args):
 		title = list(batch_df["title"])
 		reply = list(batch_df["reply"])
 		target = torch.tensor(batch_df["is_best"].to_numpy()).float().view(-1, 1)
-		if args.loss_function == "hinge":
+		if args.loss_function == "cosine":
 			target[target==0] = -1
 		x, x_mask = list2tensor(title, tokenizer)
 		y, y_mask = list2tensor(reply, tokenizer)
@@ -76,7 +78,7 @@ def train(df, model, loss_fn, optimizer, device, tokenizer, args):
 		target = target.to(device)
 
 		x_rep, y_rep = model(x, x_mask, y, y_mask)
-		if args.loss_function == "hinge":
+		if args.loss_function == "cosine":
 			loss = loss_fn(x_rep, y_rep, target)
 		elif args.loss_function == "CrossEntropy":
 			logits = model.linear(torch.cat([x_rep, y_rep], 1))
@@ -86,7 +88,7 @@ def train(df, model, loss_fn, optimizer, device, tokenizer, args):
 		nn.utils.clip_grad_norm_(model.parameters(), 1.0)
 		optimizer.step()
 
-		if args.loss_function == "hinge":
+		if args.loss_function == "cosine":
 			sim = F.cosine_similarity(x_rep, y_rep)
 			sim[sim < 0] = -1
 			sim[sim >= 0] = 1	
@@ -109,7 +111,7 @@ def evaluate(df, model, loss_fn, device, tokenizer, args):
 		title = list(batch_df["title"])
 		reply = list(batch_df["reply"])
 		target = torch.tensor(batch_df["is_best"].to_numpy()).float().view(-1,1)
-		if args.loss_function == "hinge":
+		if args.loss_function == "cosine":
 			target[target==0] = -1
 		x, x_mask = list2tensor(title, tokenizer)
 		y, y_mask = list2tensor(reply, tokenizer)
@@ -121,7 +123,7 @@ def evaluate(df, model, loss_fn, device, tokenizer, args):
 		target = target.to(device)
 
 		x_rep, y_rep = model(x, x_mask, y, y_mask)
-		if args.loss_function == "hinge":
+		if args.loss_function == "cosine":
 			loss = loss_fn(x_rep, y_rep, target)
 			sim = F.cosine_similarity(x_rep, y_rep)
 			sim[sim < 0] = -1
@@ -146,6 +148,8 @@ def main():
 						help="training file")
 	parser.add_argument("--dev_file", default=None, type=str, required=True,
 						help="development file")
+	parser.add_argument("--output_dir", default=None, type=str, required=True,
+						help="output directory for tokenizers and models")
 	parser.add_argument("--num_epochs", default=10, type=int, required=False,
 						help="number of epochs for training")
 	parser.add_argument("--vocab_size", default=50000, type=int, required=False,
@@ -157,7 +161,7 @@ def main():
 	parser.add_argument("--batch_size", default=64, type=int, required=False,
 						help="batch size for train and eval")
 	parser.add_argument("--loss_function", default="CrossEntropy", type=str, required=False,
-						choices=["CrossEntropy", "hinge"],
+						choices=["CrossEntropy", "cosine"],
 						help="which loss function to choose")
 	args = parser.parse_args()
 
@@ -172,11 +176,15 @@ def main():
 	model = DualEncoder(title_encoder, reply_encoder, type=args.loss_function)
 	if args.loss_function == "CrossEntropy":
 		loss_fn = nn.BCEWithLogitsLoss()
-	elif args.loss_function == "hinge":
+	elif args.loss_function == "cosine":
 		loss_fn = nn.CosineEmbeddingLoss()
 	optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
 	device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu") 
 	model = model.to(device)
+	
+	if not os.path.exists(args.output_dir):
+		os.makedirs(args.output_dir)
+	pickle.dump(tokenizer, open(os.path.join(args.output_dir, "tokenizer.pickle"), "wb"))
 
 	best_acc = 0.
 	for epoch in range(args.num_epochs):
@@ -186,7 +194,7 @@ def main():
 		if acc > best_acc:
 			best_acc = acc
 			print("saving best model")
-			torch.save(model.state_dict(), "best_model.pth")
+			torch.save(model.state_dict(), os.path.join(args.output_dir, "model.pth"))
 
 if __name__ == "__main__":
 	main()

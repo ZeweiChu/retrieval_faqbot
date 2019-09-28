@@ -27,7 +27,9 @@ def set_seed(args):
 	torch.manual_seed(args.seed)
 
 class FAQProcessor(DataProcessor):
-	"""Processor for the FAQ problem"""
+	"""Processor for the FAQ problem
+		modified from https://github.com/huggingface/transformers/blob/master/transformers/data/processors/glue.py#L154 
+	"""
 	def get_train_examples(self, data_dir):
 		return self._create_examples(
 			os.path.join(data_dir, "train.csv"))
@@ -117,6 +119,7 @@ def evaluate(args, model, tokenizer):
 
 
 def load_and_cache_examples(args, tokenizer, evaluate=False):
+	""" modified from https://github.com/huggingface/transformers/blob/702f589848baba97ea4897aa3f0bb937e1ec3bcf/examples/run_glue.py#L261"""
 	processor = FAQProcessor()
 	cached_features_file = "cached_{}".format("dev" if evaluate else "train")	
 	if os.path.exists(cached_features_file):
@@ -212,6 +215,10 @@ def main():
 		model = BertForSequenceClassification.from_pretrained(args.output_dir)
 		tokenizer = BertTokenizer.from_pretrained(args.output_dir)
 		model = model.to(args.device)
+
+	""" if args.do_eval:
+			run evaluation code
+	"""
 
 if __name__ == "__main__":
 	main()

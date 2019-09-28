@@ -60,7 +60,7 @@ class TransformerEncoder(nn.Module):
 
 
 class DualEncoder(nn.Module):
-	def __init__(self, encoder1, encoder2, type="hinge"):
+	def __init__(self, encoder1, encoder2, type="cosine"):
 		super(DualEncoder, self).__init__()
 		self.encoder1 = encoder1
 		self.encoder2 = encoder2

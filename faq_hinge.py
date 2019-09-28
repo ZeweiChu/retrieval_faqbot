@@ -73,39 +73,28 @@ def train(df, model, loss_fn, optimizer, device, tokenizer, args):
 		replies = reply + neg_reply
 		x, x_mask = list2tensor(title, tokenizer)
 		y, y_mask = list2tensor(replies, tokenizer)
-		target = x.new_ones(batch_size * 2).float()
-		target[batch_size:] = -1 if args.loss_function == "cosine" else 0	
 	
 		x = x.to(device)	
 		x_mask = x_mask.to(device)
 		y = y.to(device)	
 		y_mask = y_mask.to(device)
-		target = target.to(device)
 
 		x_rep, y_rep = model(x, x_mask, y, y_mask)
-		if args.loss_function == "cosine":
-			loss = loss_fn(x_rep, y_rep, target)
-		elif args.loss_function == "CrossEntropy":
-			logits = model.linear(torch.cat([x_rep, y_rep], 1))
-			loss = loss_fn(logits, target)
+		sim = F.cosine_similarity(x_rep, y_rep)
+		sim1 = sim[:batch_size]
+		sim2 = sim[batch_size:]
+		hinge_loss = sim2 - sim1 + 0.5
+		hinge_loss[hinge_loss < 0] = 0
+		hinge_loss = torch.mean(hinge_loss)
+
 		optimizer.zero_grad()
-		loss.backward()
+		hinge_loss.backward()
 		nn.utils.clip_grad_norm_(model.parameters(), 1.0)
 		optimizer.step()
 
-		if args.loss_function == "cosine":
-			sim = F.cosine_similarity(x_rep, y_rep)
-			sim[sim < 0] = -1
-			sim[sim >= 0] = 1	
-		elif args.loss_function == "CrossEntropy":
-			sim = model.linear(torch.cat([x_rep, y_rep], 1))
-			sim = torch.sigmoid(sim)
-			sim[sim < 0.5] = 0
-			sim[sim >= 0.5] = 1	
-
-		acc = torch.sum(sim == target).item() / target.shape[0]
+		acc = torch.sum(sim1 > sim2).item() / batch_size 
 		if i % 100 == 0:
-			print("iteration: {}, loss: {}, accuracy: {}".format(i, loss.item(), acc))
+			print("iteration: {}, loss: {}, accuracy: {}".format(i, hinge_loss.item(), acc))
 
 def evaluate(df, model, loss_fn, device, tokenizer, args):
 	model.eval()
@@ -123,29 +112,23 @@ def evaluate(df, model, loss_fn, device, tokenizer, args):
 		x, x_mask = list2tensor(title, tokenizer)
 		y, y_mask = list2tensor(replies, tokenizer)
 		target = x.new_ones(batch_size * 2).float()
-		target[batch_size:] = -1 if args.loss_function == "cosine" else 0	
+		target[batch_size:] = -1 if args.loss_function == "hinge" else 0	
 	
 		x = x.to(device)	
 		x_mask = x_mask.to(device)
 		y = y.to(device)	
 		y_mask = y_mask.to(device)
-		target = target.to(device)
 
 		x_rep, y_rep = model(x, x_mask, y, y_mask)
-		if args.loss_function == "cosine":
-			loss = loss_fn(x_rep, y_rep, target)
-			sim = F.cosine_similarity(x_rep, y_rep)
-			sim[sim < 0] = -1
-			sim[sim >= 0] = 1	
-		elif args.loss_function == "CrossEntropy":
-			logits = model.linear(torch.cat([x_rep, y_rep], 1))
-			loss = loss_fn(logits, target)
-			sim = torch.sigmoid(logits)
-			sim[sim < 0.5] = 0
-			sim[sim >= 0.5] = 1	
+		sim = F.cosine_similarity(x_rep, y_rep)
+		sim1 = sim[:batch_size]
+		sim2 = sim[batch_size:]
+		hinge_loss = sim2 - sim1 + 0.5
+		hinge_loss[hinge_loss < 0] = 0
+		hinge_loss = torch.mean(hinge_loss)
 
-		num_corrects = torch.sum(sim == target).item() 
-		total_counts = target.shape[0]
+		num_corrects += torch.sum(sim1 > sim2).item() 
+		total_counts += batch_size
 	
 	print("accuracy: {}".format(num_corrects / total_counts))
 	return num_corrects / total_counts
@@ -169,8 +152,8 @@ def main():
 						help="word embedding size")
 	parser.add_argument("--batch_size", default=64, type=int, required=False,
 						help="batch size for train and eval")
-	parser.add_argument("--loss_function", default="cosine", type=str, required=False,
-						choices=["CrossEntropy", "cosine"],
+	parser.add_argument("--loss_function", default="hinge", type=str, required=False,
+						choices=["CrossEntropy", "hinge"],
 						help="which loss function to choose")
 	args = parser.parse_args()
 
@@ -185,7 +168,7 @@ def main():
 	model = DualEncoder(title_encoder, reply_encoder, type=args.loss_function)
 	if args.loss_function == "CrossEntropy":
 		loss_fn = nn.BCEWithLogitsLoss()
-	elif args.loss_function == "cosine":
+	elif args.loss_function == "hinge":
 		loss_fn = nn.CosineEmbeddingLoss()
 	optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
 	device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu") 
