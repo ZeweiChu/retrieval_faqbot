@@ -48,9 +48,9 @@ def list2tensor(sents, tokenizer):
 		res.append(tokenizer.text2id(sent))
 	max_len = max([len(sent) for sent in res])
 	for i in range(len(res)):
-		res[i] = np.expand_dims(np.array(res[i] + [0] * (max_len - len(res[i]))), 0)
 		_mask = np.zeros((1, max_len))
 		_mask[:, :len(res[i])] = 1
+		res[i] = np.expand_dims(np.array(res[i] + [0] * (max_len - len(res[i]))), 0)
 		mask.append(_mask)
 	res = np.concatenate(res, axis=0)
 	mask = np.concatenate(mask, axis=0)
@@ -98,6 +98,8 @@ def train(df, model, loss_fn, optimizer, device, tokenizer, args):
 			sim[sim < 0.5] = 0
 			sim[sim >= 0.5] = 1	
 
+		sim = sim.view(-1)
+		target = target.view(-1)
 		acc = torch.sum(sim == target).item() / target.shape[0]
 		if i % 100 == 0:
 			print("iteration: {}, loss: {}, accuracy: {}".format(i, loss.item(), acc))
@@ -135,6 +137,8 @@ def evaluate(df, model, loss_fn, device, tokenizer, args):
 			sim[sim < 0.5] = 0
 			sim[sim >= 0.5] = 1	
 
+		sim = sim.view(-1)
+		target = target.view(-1)
 		num_corrects = torch.sum(sim == target).item() 
 		total_counts = target.shape[0]
 	

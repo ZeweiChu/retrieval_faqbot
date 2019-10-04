@@ -48,9 +48,9 @@ def list2tensor(sents, tokenizer):
 		res.append(tokenizer.text2id(sent))
 	max_len = max([len(sent) for sent in res])
 	for i in range(len(res)):
-		res[i] = np.expand_dims(np.array(res[i] + [0] * (max_len - len(res[i]))), 0)
 		_mask = np.zeros((1, max_len))
 		_mask[:, :len(res[i])] = 1
+		res[i] = np.expand_dims(np.array(res[i] + [0] * (max_len - len(res[i]))), 0)
 		mask.append(_mask)
 	res = np.concatenate(res, axis=0)
 	mask = np.concatenate(mask, axis=0)
