@@ -15,6 +15,7 @@ import pandas as pd
 import pkuseg
 from elmoformanylangs import Embedder
 
+# 得到我们的elmo encoder
 e = Embedder('/share/data/lang/users/zeweichu/projs/faqbot/zhs.model')
 # sents = ["今天天气真好啊",
 #         "潮水退了就知道谁没穿裤子"]
@@ -44,24 +45,26 @@ def main():
 
         titles = [seg.cut(title) for title in candidates["title"]]
         embeddings = e.sents2elmo(titles)
+        # list of numpy arrays, each array with shape [seq_len * 1024]
         # code.interact(local=locals())
-        candidate_embeddings = [np.mean(embedding, 0) for embedding in embeddings]
+        candidate_embeddings = [np.mean(embedding, 0) for embedding in embeddings] # a list of 1024 dimensional vectors
         with open("embeddings.pkl", "wb") as fout:
-            pickle.dump([candidate_title, candidate_reply, embeddings], fout)
+            pickle.dump([candidate_title, candidate_reply, candidate_embeddings], fout)
     else:
         with open("embeddings.pkl", "rb") as fin:
-            candidate_title, candidate_reply, embeddings = pickle.load(fin)
+            candidate_title, candidate_reply, candidate_embeddings = pickle.load(fin)
 
     while True:
         title = input("你的问题是？\n")
         if len(title.strip()) == 0:
             continue
         title = [seg.cut(title.strip())] 
-        title_embedding = [np.mean(e.sents2elmo(title)[0], 0)]
+        title_embedding = [np.mean(e.sents2elmo(title)[0], 0)] # 得到了新问题的ELMo embedding
         scores = cosine_similarity(title_embedding, candidate_embeddings)[0]
         top5_indices = scores.argsort()[-5:][::-1]
         for index in top5_indices:
             print("可能的答案，参考问题：" + candidate_title[index] + "\t答案：" + candidate_reply[index] + "\t得分：" + str(scores[index]))
+            print()
 
 if __name__ == "__main__":
     main()
