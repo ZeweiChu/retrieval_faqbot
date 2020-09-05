@@ -77,10 +77,10 @@ def main():
     matched_questions_index = np.asarray(matched_questions_index)
     questions = [seg.cut(q.strip()) for q in questions]
     question_embedding = [np.mean(emb, 0) for emb in e.sents2elmo(questions)] # 得到了新问题的ELMo embedding
-    scores = cosine_similarity(question_embedding, candidate_embeddings)
-    sorted_indices = scores.argsort()[:, ::-1]#[-5:][::-1]
+    scores = cosine_similarity(question_embedding, candidate_embeddings) # 计算新问题和所有候选问题的分数
+    sorted_indices = scores.argsort()[:, ::-1]#[-5:][::-1] # 对分数做排名
     # code.interact(local=locals())
-    mmr = mean_reciprocal_rank(sorted_indices == matched_questions_index)
+    mmr = mean_reciprocal_rank(sorted_indices == matched_questions_index) # 利用分数排名来计算mean receiprocal rank
     print("mean reciprocal rank: {}".format(mmr))
 
 if __name__ == "__main__":
